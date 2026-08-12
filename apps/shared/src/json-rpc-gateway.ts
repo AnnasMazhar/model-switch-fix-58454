@@ -54,6 +54,8 @@ export interface GatewayClientOptions {
   connectErrorMessage?: string
   connectTimeoutMs?: number
   createRequestId?: (nextId: number) => GatewayRequestId
+  /** Return true to intercept the default closed-state transition. */
+  onSocketClose?: (event: CloseEvent) => boolean | void
   requestIdPrefix?: string
   requestTimeoutMs?: number
   socketFactory?: (url: string) => WebSocketLike
@@ -84,6 +86,7 @@ export class JsonRpcGatewayClient {
       connectTimeoutMs: options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
       createRequestId: options.createRequestId ?? ((nextId: number) => `${options.requestIdPrefix ?? 'r'}${nextId}`),
       notConnectedErrorMessage: options.notConnectedErrorMessage ?? 'gateway not connected',
+      onSocketClose: options.onSocketClose ?? (() => false),
       requestIdPrefix: options.requestIdPrefix ?? 'r',
       requestTimeoutMs: options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
       socketFactory: options.socketFactory
@@ -108,6 +111,7 @@ export class JsonRpcGatewayClient {
     }
 
     let url: URL
+
     try {
       url = new URL(wsUrl)
     } catch {
@@ -135,8 +139,12 @@ export class JsonRpcGatewayClient {
       this.handleMessage(message.data)
     })
 
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', event => {
       if (this.socket !== socket) {
+        return
+      }
+
+      if (this.options.onSocketClose(event)) {
         return
       }
 
@@ -297,7 +305,11 @@ export class JsonRpcGatewayClient {
         pending.timer = setTimeout(() => {
           if (this.pending.delete(id)) {
             detach()
-            reject(new Error(`request timed out: ${method}`))
+            // Include the configured timeout so a caller (or a user looking
+            // at an error toast) can tell whether the default 30s window
+            // fired or a per-call override — e.g. /compress opts into 120s.
+            const seconds = Math.round(timeoutMs / 1000)
+            reject(new Error(`request timed out after ${seconds}s: ${method}`))
           }
         }, timeoutMs)
       }
