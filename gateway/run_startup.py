@@ -46,9 +46,10 @@ class GatewayStartupMixin:
         ``HERMES_MAX_ITERATIONS`` before this runs, so the env slot already carries the config value;
         resolve it the same way the turn loop does (``none``/``unlimited`` spellings included) instead of
         ``int()`` on the raw string with an invented ``500`` default (#116888)."""
-        from hermes_cli.config import TURN_LIMIT_UNLIMITED, resolve_turn_limit
-        limit = resolve_turn_limit(os.getenv("HERMES_MAX_ITERATIONS"))
-        logger.info("Agent budget: max_iterations=%s (agent.max_turns from config.yaml, else the HERMES_MAX_ITERATIONS bridge)",
+        from gateway.run import _current_max_iterations
+        from hermes_cli.config import TURN_LIMIT_UNLIMITED
+        limit = _current_max_iterations()
+        logger.info("Agent budget: max_iterations=%s (agent.messaging_max_turns for chat, else agent.max_turns)",
                     "unlimited" if limit == TURN_LIMIT_UNLIMITED else limit)
 
     # A configured platform failed non-retryably this boot and is parked: every "we are serving"
