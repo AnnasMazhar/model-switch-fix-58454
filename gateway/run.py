@@ -1657,8 +1657,14 @@ def _current_max_iterations() -> int:
         except Exception:
             cfg = {}
         agent_cfg = cfg.get("agent")
-        return _resolve_turn_limit(agent_cfg.get("max_turns") if isinstance(agent_cfg, dict) else None)
-    return _resolve_turn_limit(os.getenv("HERMES_MAX_ITERATIONS"))
+        base = _resolve_turn_limit(agent_cfg.get("max_turns") if isinstance(agent_cfg, dict) else None)
+        from hermes_cli.config import apply_messaging_turn_cap
+        return apply_messaging_turn_cap(agent_cfg if isinstance(agent_cfg, dict) else {}, base)
+    base = _resolve_turn_limit(os.getenv("HERMES_MAX_ITERATIONS"))
+    from hermes_cli.config import apply_messaging_turn_cap
+    raw_cap = os.getenv("HERMES_MESSAGING_MAX_ITERATIONS")
+    agent_cfg = {"messaging_max_turns": raw_cap} if raw_cap is not None else {}
+    return apply_messaging_turn_cap(agent_cfg, base)
 
 
 from contextlib import asynccontextmanager as _asynccontextmanager, contextmanager as _contextmanager, suppress
@@ -1974,6 +1980,8 @@ def _bridge_max_turns_to_env(agent_cfg: Any) -> None:
     """Bridge ``agent.max_turns`` preserving its raw spelling ("none", "unlimited", "120"); Python None
     (`null` / bare `key:`) clears a stale bridge instead, since str(None) -> "None" would map to the
     unlimited sentinel rather than "absent = default"."""
+    if isinstance(agent_cfg, dict):
+        _bridge_messaging_turns_to_env(agent_cfg)
     if not isinstance(agent_cfg, dict) or "max_turns" not in agent_cfg:
         return
     raw = agent_cfg["max_turns"]
@@ -1981,6 +1989,18 @@ def _bridge_max_turns_to_env(agent_cfg: Any) -> None:
         os.environ["HERMES_MAX_ITERATIONS"] = str(raw)
     elif "HERMES_MAX_ITERATIONS" in os.environ:
         del os.environ["HERMES_MAX_ITERATIONS"]
+
+
+def _bridge_messaging_turns_to_env(agent_cfg: Any) -> None:
+    """Bridge ``agent.messaging_max_turns`` for chat turns. Cron does not read this env var."""
+    if not isinstance(agent_cfg, dict) or "messaging_max_turns" not in agent_cfg:
+        os.environ.pop("HERMES_MESSAGING_MAX_ITERATIONS", None)
+        return
+    raw = agent_cfg["messaging_max_turns"]
+    if raw is not None:
+        os.environ["HERMES_MESSAGING_MAX_ITERATIONS"] = str(raw)
+    elif "HERMES_MESSAGING_MAX_ITERATIONS" in os.environ:
+        del os.environ["HERMES_MESSAGING_MAX_ITERATIONS"]
 
 
 def _bridge_terminal_config_to_env(_terminal_cfg: dict) -> None:

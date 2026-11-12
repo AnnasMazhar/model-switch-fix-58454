@@ -1881,6 +1881,18 @@ def resolve_turn_limit(raw: Any, default: int = TURN_LIMIT_UNLIMITED) -> int:
     return TURN_LIMIT_UNLIMITED if n <= 0 else n
 
 
+def apply_messaging_turn_cap(agent_cfg: Any, base: int) -> int:
+    """Use ``agent.messaging_max_turns`` for a chat turn when that key is set.
+
+    Cron keeps ``agent.max_turns``. Each tool iteration replays the transcript,
+    and DeepSeek bills that replay as cache-read tokens. A missing key leaves
+    ``base`` unchanged.
+    """
+    if not isinstance(agent_cfg, dict) or "messaging_max_turns" not in agent_cfg:
+        return base
+    return resolve_turn_limit(agent_cfg.get("messaging_max_turns"), default=base)
+
+
 def cfg_get(cfg: Optional[Dict[str, Any]], *keys: str, default: Any = None) -> Any:
     """Traverse nested dict keys safely, returning ``default`` on any miss.
     Explicit ``None`` values are returned as-is (``dict.get`` semantics: ``default`` only when the
